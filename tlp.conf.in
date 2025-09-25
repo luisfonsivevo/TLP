@@ -326,8 +326,8 @@
 # Note: radeon driver only.
 # Default: <none>
 
-#RADEON_DPM_STATE_ON_AC=performance
-#RADEON_DPM_STATE_ON_BAT=battery
+RADEON_DPM_STATE_ON_AC=performance
+RADEON_DPM_STATE_ON_BAT=battery
 
 # Graphics clock speed (profile method): low, mid, high, auto, default;
 # auto = mid on BAT, high on AC.

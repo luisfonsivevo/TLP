@@ -135,71 +135,48 @@ set_amdgpu_profile () {
     for gpu in "${BASE_DRMD}"/card?; do
         driver=$(readlink "${gpu}/device/driver")
         driver=${driver##*/}
-        case "$driver" in
-            amdgpu)
-                if [ -f "$gpu/device/power_dpm_force_performance_level" ]; then
-                    # Use amdgpu dynamic power management method (DPM)
-                    if [ "$1" = "1" ]; then
-                        level=${RADEON_DPM_PERF_LEVEL_ON_BAT:-}
-                    else
-                        level=${RADEON_DPM_PERF_LEVEL_ON_AC:-}
-                    fi
+        
+        if [ -f "$gpu/device/power_dpm_force_performance_level" ] && [ -f "$gpu/device/power_dpm_state" ]; then
+            # Use radeon/amdgpu dynamic power management method (DPM)
+            if [ "$1" = "1" ]; then
+                level=${RADEON_DPM_PERF_LEVEL_ON_BAT:-}
+                pwr=${RADEON_DPM_STATE_ON_BAT:-}
+            else
+                return 0
+                level=${RADEON_DPM_PERF_LEVEL_ON_AC:-}
+                pwr=${RADEON_DPM_STATE_ON_AC:-}
+            fi
 
-                    if [ -z "$level" ]; then
-                        # do nothing if unconfigured
-                        echo_debug "pm" "set_amdgpu_profile($1).amdgpu.not_configured: gpu=$gpu"
-                        return 0
-                    else
-                        write_sysf "$level" "$gpu/device/power_dpm_force_performance_level"; rc1=$?
-                        echo_debug "pm" "set_amdgpu_profile($1).amdgpu: gpu=$gpu level=${level}: rc=$rc1"
-                    fi
-                    sdone=1
-                fi
-                ;;
+            if [ -z "$pwr" ] || [ -z "$level" ]; then
+                # do nothing if (partially) unconfigured
+                echo_debug "pm" "set_amdgpu_profile($1).${driver}.not_configured: gpu=$gpu"
+                return 0
+            else
+                #write_sysf "$level" "$gpu/device/power_dpm_force_performance_level"; rc1=$?
+                write_sysf "$pwr" "$gpu/device/power_dpm_state"; rc2=$?
+                echo_debug "pm" "set_amdgpu_profile($1).${driver}: gpu=$gpu perf=${level}: rc=$rc1; state=${pwr}: rc=$rc2"
+            fi
+            sdone=1
 
-            radeon)
-                if [ -f "$gpu/device/power_dpm_force_performance_level" ] && [ -f "$gpu/device/power_dpm_state" ]; then
-                    # Use radeon dynamic power management method (DPM)
-                    if [ "$1" = "1" ]; then
-                        level=${RADEON_DPM_PERF_LEVEL_ON_BAT:-}
-                        pwr=${RADEON_DPM_STATE_ON_BAT:-}
-                    else
-                        level=${RADEON_DPM_PERF_LEVEL_ON_AC:-}
-                        pwr=${RADEON_DPM_STATE_ON_AC:-}
-                    fi
+        elif [ "$driver" = "radeon" ] && [ -f "$gpu/device/power_method" ] && [ -f "$gpu/device/power_profile" ]; then
+            # Use legacy radeon power profile method
+            if [ "$1" = "1" ]; then
+                pwr=${RADEON_POWER_PROFILE_ON_BAT:-}
+            else
+                pwr=${RADEON_POWER_PROFILE_ON_AC:-}
+            fi
 
-                    if [ -z "$pwr" ] || [ -z "$level" ]; then
-                        # do nothing if (partially) unconfigured
-                        echo_debug "pm" "set_amdgpu_profile($1).radeon.not_configured: gpu=$gpu"
-                        return 0
-                    else
-                        write_sysf "$level" "$gpu/device/power_dpm_force_performance_level"; rc1=$?
-                        write_sysf "$pwr" "$gpu/device/power_dpm_state"; rc2=$?
-                        echo_debug "pm" "set_amdgpu_profile($1).radeon: gpu=$gpu perf=${level}: rc=$rc1; state=${pwr}: rc=$rc2"
-                    fi
-                    sdone=1
-
-                elif [ -f "$gpu/device/power_method" ] && [ -f "$gpu/device/power_profile" ]; then
-                    # Use legacy radeon power profile method
-                    if [ "$1" = "1" ]; then
-                        pwr=${RADEON_POWER_PROFILE_ON_BAT:-}
-                    else
-                        pwr=${RADEON_POWER_PROFILE_ON_AC:-}
-                    fi
-
-                    if [ -z "$pwr" ]; then
-                        # do nothing if unconfigured
-                        echo_debug "pm" "set_amdgpu_profile($1).radeon_legacy.not_configured: gpu=$gpu"
-                        return 0
-                    else
-                        write_sysf "profile" "$gpu/device/power_method"; rc1=$?
-                        write_sysf "$pwr" "$gpu/power_profile"; rc2=$?
-                        echo_debug "pm" "set_amdgpu_profile($1).radeon_legacy: gpu=$gpu method=profile: rc=$rc1; profile=${pwr}: rc=$rc2"
-                    fi
-                    sdone=1
-                fi
-                ;;
-        esac
+            if [ -z "$pwr" ]; then
+                # do nothing if unconfigured
+                echo_debug "pm" "set_amdgpu_profile($1).radeon_legacy.not_configured: gpu=$gpu"
+                return 0
+            else
+                write_sysf "profile" "$gpu/device/power_method"; rc1=$?
+                write_sysf "$pwr" "$gpu/power_profile"; rc2=$?
+                echo_debug "pm" "set_amdgpu_profile($1).radeon_legacy: gpu=$gpu method=profile: rc=$rc1; profile=${pwr}: rc=$rc2"
+            fi
+            sdone=1
+        fi
     done
 
     if [ $sdone -eq 0 ]; then
